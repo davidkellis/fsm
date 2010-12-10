@@ -1,0 +1,5 @@
+fsm is a simple ruby library that allows you to create NFAs and DFAs.
+
+Read all about NFAs at http://en.wikipedia.org/wiki/Nondeterministic_finite-state_machine and DFAs at http://en.wikipedia.org/wiki/Deterministic_finite_automaton.
+
+This project is licensed under the MIT license.
