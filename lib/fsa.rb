@@ -2,92 +2,132 @@ require 'set'
 require 'nfa'
 require 'dfa'
 
+# Most of the machines constructed here are based
+# on section 2.5 of the Ragel User Guide (http://www.complang.org/ragel/ragel-guide-6.6.pdf)
+
 module FSA
-  module FSABuilder
-    ############### The following methods create FSAs given Strings #################
+  module Builder
+    ############### The following methods create FSAs given a stream of input tokens #################
     
-    def literal(str)
-      start = current_state = NFAState.new
-      str.each_char do |c|
-        next_state = NFAState.new
-        current_state.transition(c, next_state)
+    def literal(token_stream)
+      start = current_state = State.new
+      nfa = NFA.new(start)
+      token_stream.each do |token|
+        next_state = State.new
+        nfa.add_transition(token, current_state, next_state)
         current_state = next_state
       end
       current_state.final = true
-      NFA.new(start)
+      nfa
     end
     
-    def any(char_array_or_string)
-      start = NFAState.new
-      final = NFAState.new(true)
-      enum = case char_array_or_string
-        when String
-          char_array_or_string.each_char
-        when Array
-          char_array_or_string.each
-      end
-      enum.each { |c| start.transition(c, final) }
-      NFA.new(start)
+    def any(token_stream)
+      start = State.new
+      nfa = NFA.new(start)
+      final = State.new(true)
+      token_stream.each {|token| nfa.add_transition(token, start, final) }
+      nfa
     end
     
-    def range(c_begin, c_end)
-      any((c_begin..c_end).to_a)
-    end
+    # def range(c_begin, c_end)
+    #   any((c_begin..c_end).to_a)
+    # end
     
     ############### The following methods create FSAs given other FSAs #################
     
-    # append b onto a
+    # Append b onto a
+    # Appending produces a machine that matches all the strings in machine a 
+    # followed by all the strings in machine b.
+    # This differs from concat in that the composite machine's final states are the union of machine a's final states
+    # and machine b's final states.
     def append(a, b)
-      a = a.dup if a.ro?
-      b = b.dup if b.ro?
-      a.final_states.each { |s| s.epsilon_transition(b.start_state) }
-      a.final_states |= b.final_states
+      a = a.deep_clone
+      b = b.deep_clone
+      
+      # add an epsilon transition from each final state of machine a to the start state of maachine b.
+      # then mark each of a's final states as not final
+      a.final_states.each do |final_state|
+        a.add_transition(:epsilon, final_state, b.start_state)
+      end
+      
+      # add all of machine b's transitions to machine a
+      b.transitions.each {|t| a.add_transition(t.token, t.from, t.to) }
+      a.final_states = a.final_states | b.final_states
+      
       a
     end
     
-    #concatenate b onto a
+    # Concatenate b onto a
+    # Concatenation produces a machine that matches all the strings in machine a 
+    # followed by all the strings in machine b.
+    # This differs from append in that the composite machine's final states are the set of final states
+    # taken from machine b.
     def concat(a, b)
-      a = a.dup if a.ro?
-      b = b.dup if b.ro?
-      a.final_states.each { |s| s.epsilon_transition(b.start_state) ; s.final = false }
+      a = a.deep_clone
+      b = b.deep_clone
+      
+      # add an epsilon transition from each final state of machine a to the start state of maachine b.
+      # then mark each of a's final states as not final
+      a.final_states.each do |final_state|
+        a.add_transition(:epsilon, final_state, b.start_state)
+        final_state.final = false
+      end
+      
+      # add all of machine b's transitions to machine a
+      b.transitions.each {|t| a.add_transition(t.token, t.from, t.to) }
       a.final_states = b.final_states
+      
       a
     end
     
     def union(a, b)
-      a = a.dup if a.ro?
-      b = b.dup if b.ro?
-      start = NFAState.new.epsilon_transition(a.start_state, b.start_state)
-      m = NFA.new(start, a.final_states | b.final_states)
-      m
+      a = a.deep_clone
+      b = b.deep_clone
+      start = State.new
+      nfa = NFA.new(start)
+      
+      # add epsilon transitions from the start state of the new machine to the start state of machines a and b
+      nfa.add_transition(:epsilon, start, a.start_state)
+      nfa.add_transition(:epsilon, start, b.start_state)
+      
+      # add all of a's and b's transitions to the new machine
+      (a.transitions + b.transitions).each {|t| nfa.add_transition(t.token, t.from, t.to) }
+      
+      nfa
     end
     
     def kleene(machine)
-      machine = machine.dup if machine.ro?
-      a,b,c,d = 4.times.map { NFAState.new }
-      d.final = true
-      a.epsilon_transition(b, d)
-      b.epsilon_transition(machine.start_state)
-      machine.final_states.each { |s| s.epsilon_transition(c) ; s.final = false }
-      c.epsilon_transition(b, d)
-      NFA.new(a, [d])
+      machine = machine.deep_clone
+      start = State.new
+      final = State.new(true)
+      
+      nfa = NFA.new(start)
+      nfa.add_transition(:epsilon, start, final)
+      nfa.add_transition(:epsilon, start, machine.start_state)
+      machine.final_states.each do |final_state|
+        nfa.add_transition(:epsilon, final_state, start)
+        final_state.final = false
+      end
+      
+      # add all of machine's transitions to the new machine
+      (machine.transitions).each {|t| nfa.add_transition(t.token, t.from, t.to) }
+      
+      nfa
     end
     
     def plus(machine)
-      #machine = machine.dup if machine.ro?
       concat(machine, kleene(machine))
     end
     
     def optional(machine)
-      #machine = machine.dup if machine.ro?
-      union(machine, NFA.new(NFAState.new(true)))
+      union(machine, NFA.new(State.new(true)))
     end
     
     def repeat(machine, min, max = nil)
       max ||= min
-      m = NFA.new(NFAState.new(true))
-      min.times { m = concat(m, machine.dup) }
-      (max - min).times { m = append(m, machine.dup) }
+      m = NFA.new(State.new(true))
+      min.times { m = concat(m, machine) }
+      (max - min).times { m = append(m, machine) }
       m
     end
     
@@ -133,84 +173,4 @@ module FSA
       union_dfa
     end
   end
-end
-
-def main
-  a = literal('a').ro!
-  b = literal('b').ro!
-  c = literal('c').ro!
-  d = literal('d').ro!
-  n = literal('n').ro!
-  y = literal('y').ro!
-  z = literal('z').ro!
-  
-  m1 = concat(a, b).ro!                                   # ab
-  m2 = union(concat(a, b), concat(y, z)).ro!              # ab|yz
-  m3 = concat(concat(a, kleene(union(b, c))), d).ro!      # a(b|c)*d
-  m4 = plus(m1).ro!                                       # (ab)+
-  m5 = concat(b, concat(repeat(concat(a, n), 2), a)).ro!  # b(an){2}a
-  m6 = repeat(a, 4, 6).ro!                                # a{4,6}
-  m7 = difference(plus(range('a', 'z')), literal('int')).ro!    # [a-z]+ - 'int'
-  
-  # The following two machines match C-style comments. I'm not quite sure how they differ.
-  m8 = concat(concat(literal('/*'), difference(kleene(any('blah*/ ')), concat(concat(kleene(any('blah*/ ')), literal('*/')), kleene(any('blah*/ '))))), literal('*/'))
-  #m9 = concat(concat(literal('/*'), difference(kleene(any('blah*/ ')), literal('*/'))), literal('*/'))
-  #m9 = concat(concat(literal('/*'), difference(kleene(any('blah*/ ')), concat(concat(kleene(any('blah*/ ')), literal('*/')), kleene(any('blah*/ '))))), literal('*/')).to_dfa
-  #m9 = concat(concat(literal('/*'), difference(kleene(any('blah*/ ')), intersection(kleene(any('blah*/ ')), literal('*/')) )), literal('*/'))
-  
-  m10 = difference(kleene(any('abcdefg')), concat(concat(kleene(any('abcdefg')), literal('de')), kleene(any('abcdefg'))))
-  m11 = concat(difference(kleene(any('abcdefg')), concat(concat(kleene(any('abcdefg')), literal('ab')), kleene(any('abcdefg')))), literal('aa'))
-  
-  assert a.match?('a')
-  assert m1.match?('ab')
-  assert !m1.match?('a')
-  assert !m1.match?('aab')
-  assert !m1.match?('abb')
-  assert m2.match?('ab')
-  assert m2.match?('yz')
-  assert !m2.match?('abb')
-  assert !m2.match?('aab')
-  assert !m2.match?('abyz')
-  assert !m2.match?('y')
-  assert !m2.match?('a')
-  assert m3.match?('abbbbbbd')
-  assert m3.match?('abcccbbd')
-  assert m3.match?('abcbcd')
-  assert m3.match?('abcd')
-  assert m3.match?('acbd')
-  assert m3.match?('abd')
-  assert m3.match?('acd')
-  assert m3.match?('ad')
-  assert !m3.match?('aabbbd')
-  assert !m3.match?('add')
-  assert m4.match?('ab')
-  assert m4.match?('abab')
-  assert !m4.match?('aba')
-  assert !m4.match?('ababb')
-  assert m5.match?('banana')
-  assert !m5.match?('banan')
-  assert m6.match?('aaaa')
-  assert m6.match?('aaaaaa')
-  assert !m6.match?('aaa')
-  assert !m6.match?('aaaaaaa')
-  assert m7.match?('abc')
-  assert m7.match?('integer')
-  assert !m7.match?('int')
-  assert m8.match?('/* blah blah blah */')
-  assert m8.match?('/* blah * / * // blah ***** blah */')
-  assert m8.match?('/**/')
-  assert !m8.match?('/* blah * / * // blah ***** blah **/ */')
-  assert !m8.match?('/* blah * / * // blah ***** blah */ /')
-  assert m10.match?('')
-  assert m10.match?('ed')
-  assert m10.match?('aaaabdddddceeeddddgfecbabca')
-  assert !m10.match?('de')
-  assert !m10.match?('edde')
-  assert !m10.match?('deed')
-  assert !m10.match?('aadeaa')
-  assert !m10.match?('deaaaa')
-  assert !m10.match?('aaaade')
-  assert m11.match?('acdaa')
-  assert m11.match?('bbaa')
-  assert !m11.match?('aabaa')
 end

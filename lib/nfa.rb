@@ -16,25 +16,39 @@ module FSA
     attr_accessor :transitions
     attr_accessor :final_states
     
-    def initialize(alphabet, states, start_state)
-      @alphabet = alphabet
-      @states = states
+    def initialize(start_state, transitions = [], alphabet = Set.new)
       @start_state = start_state
-      @transitions = []
+      @transitions = transitions
+      
+      @alphabet = Set.new(alphabet)
+      @alphabet.merge(@transitions.map(&:token))
+      
+      @states = reachable_states
       update_final_states
       reset_current_states
     end
     
+    def deep_clone
+      old_states = @states.to_a
+      new_states = old_states.map(&:dup)
+      state_mapping = Hash[old_states.zip(new_states)]
+      new_transitions = @transitions.map {|t| Transition.new(t.token, state_mapping[t.from], state_mapping[t.to]) }
+      
+      NFA.new(state_mapping[@start_state], new_transitions, Set.new(@alphabet))
+    end
+    
     def update_final_states
-      @final_states = @states.select { |s| s.final? }
+      @final_states = @states.select { |s| s.final? }.to_set
     end
     
     def reset_current_states
       @current_states = epsilon_closure([@start_state])
     end
     
-    def add_transition(event, from_state, to_state)
-      t = Transition.new(event, from_state, to_state)
+    def add_transition(token, from_state, to_state)
+      @alphabet << token      # alphabet is a set, so there will be no duplications
+      @states << to_state     # states is a set, so there will be no duplications (to_state should be the only new state)
+      t = Transition.new(token, from_state, to_state)
       @transitions << t
       t
     end
@@ -90,14 +104,22 @@ module FSA
       visited_states
     end
     
-    
-    
-    
-    
+    # Returns a set of State objects which are reachable through any transition path from the NFA's start_state.
+    def reachable_states
+      visited_states = Set.new()
+      unvisited_states = Set[@start_state]
+      begin
+        outbound_transitions = @transitions.select { |t| unvisited_states.include?(t.from) }
+        destination_states = outbound_transitions.map(&:to).to_set
+        visited_states.merge(unvisited_states)         # add the unvisited states to the visited_states
+        unvisited_states = destination_states - visited_states
+      end until unvisited_states.empty?
+      visited_states
+    end
+
     # This is an implementation of the "Algorithm: Convert NFA to DFA" presented here: http://web.cecs.pdx.edu/~harry/compilers/slides/LexicalPart3.pdf
     # An implementation of the subset construction algorithm.
-    def dfa_state_chart(alphabet = :implicit)
-      alphabet = implicit_alphabet if alphabet == :implicit
+    def dfa_state_chart
       dfa_states = Hash.new
       unprocessed_states = Array.new
       
@@ -153,28 +175,6 @@ module FSA
       start_state = composite_states[@start_state.epsilon_closure([], false).to_set]
       DFA.new(start_state, nil, alphabet)
     end
-    
-    
-    
-    def reachable_states(states = [])
-      unless states.include?(self)
-        states << self
-        @transitions.each { |t| t.dest_state.reachable_states(states) }
-      end
-      states
-    end
-
-    def reachable_transitions
-      reachable_states.reduce([]) { |memo, s| memo |= s.transitions }
-    end
-
-    def epsilon_transition(*dest_states)
-      for dest_state in dest_states
-        @transitions << Transition.new(Transition::Epsilon, dest_state)
-      end
-      self
-    end
-
   end
   
   class State
@@ -195,47 +195,27 @@ module FSA
     def final?
       @final
     end
+    
+    def dup
+      State.new(@final)
+    end
   end
 
   class Transition
     Epsilon = :epsilon
     
-    attr_reader :event
+    attr_reader :token
     attr_reader :from
     attr_reader :to
     
-    def initialize(event, from_state, to_state)
-      @event = event
+    def initialize(token, from_state, to_state)
+      @token = token
       @from = from_state
       @to = to_state
     end
     
     def accept?(input)
-      @event == input
+      @token == input
     end
   end
 end
-
-def main
-  # create some states with which to manually construct an NFA
-  start = FSA::State.new
-  a = FSA::State.new
-  b1 = FSA::State.new
-  b2 = FSA::State.new
-  c = FSA::State.new(true)
-  
-  # build an NFA to match "abbc"
-  nfa = FSA::NFA.new(['a', 'b', 'c'], [start, a, b1, b2, c], start)
-  nfa.add_transition('a', start, a)
-  nfa.add_transition('b', a, b1)
-  nfa.add_transition('b', b1, b2)
-  nfa.add_transition('c', b2, c)
-  
-  # run the DFA
-  puts "nfa.match?(\"abc\") = #{nfa.match?("abc")}"
-  puts "nfa.match?(\"\") = #{nfa.match?("")}"
-  puts "nfa.match?(\"abbcc\") = #{nfa.match?("abbcc")}"
-  puts "nfa.match?(\"abbc\") = #{nfa.match?("abbc")}"
-end
-
-main if __FILE__ == $0
