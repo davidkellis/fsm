@@ -2,4 +2,6 @@ fsm is a simple ruby library that allows you to create NFAs and DFAs.
 
 Read all about NFAs at http://en.wikipedia.org/wiki/Nondeterministic_finite-state_machine and DFAs at http://en.wikipedia.org/wiki/Deterministic_finite_automaton.
 
-This project is licensed under the MIT license.
+The Ragel user guide (http://www.complang.org/ragel/ragel-guide-6.6.pdf) is a great reference
+for understanding how each of the regular language operators can be implemented. I implemented
+several of the operators as described in the Ragel user guide.
