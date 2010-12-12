@@ -24,7 +24,7 @@ class FSATest < Test::Unit::TestCase
     @m4 = plus(@m1)                                              # (ab)+
     @m5 = concat(@b, concat(repeat(concat(@a, @n), 2), @a))      # b(an){2}a
     @m6 = repeat(@a, 4, 6)                                       # a{4,6}
-    @m7 = difference(plus(range('a', 'z')), literal('int', simple_alphabet))      # [a-z]+ - 'int'
+    @m7 = difference(plus(range('a', 'z', simple_alphabet)), literal('int', simple_alphabet))      # [a-z]+ - 'int'
     
     # m8 is a C comment parser
     # The Ragel rule is:
@@ -43,6 +43,7 @@ class FSATest < Test::Unit::TestCase
                              kleene(any('abcdefg'))))
     # @m11 = concat(difference(kleene(any('abcdefg')), concat(concat(kleene(any('abcdefg')), literal('ab')), kleene(any('abcdefg')))), literal('aa'))
     @m12 = negate(@m2)      # !(ab|yz)
+    # puts @m7.graphviz
   end
   
   def build_dfa_machines

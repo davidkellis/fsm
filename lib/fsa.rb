@@ -36,8 +36,8 @@ module FSA
     end
     
     # This implements a character class, and is specifically for use with matching strings
-    def range(c_begin, c_end)
-      any((c_begin..c_end).to_a)
+    def range(c_begin, c_end, alphabet = DEFAULT_ALPHABET)
+      any((c_begin..c_end).to_a, alphabet)
     end
     
     ############### The following methods create FSAs given other FSAs #################

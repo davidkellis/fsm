@@ -181,7 +181,7 @@ module FSA
         retval += "#{t.from.id} -> #{t.to.id} [label=\"#{t.token}\"];"
       end
       @final_states.each do |s|
-        retval += "#{s.id} [color=lightblue2, style=filled];"
+        retval += "#{s.id} [color=lightblue2, style=filled, shape=doublecircle];"
       end
       retval += " }"
       retval
