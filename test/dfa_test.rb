@@ -18,7 +18,6 @@ class DFATest < Test::Unit::TestCase
     nfa.add_transition('b', b1, b2)
     nfa.add_transition('c', b2, c)
     dfa = nfa.to_dfa
-    puts dfa.transitions.map(&:inspect).join("\n")
   
     # run the DFA
     assert !dfa.match?("abc")
