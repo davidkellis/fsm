@@ -126,11 +126,12 @@ module FSA
       nfa_start_state_set = epsilon_closure([@start_state])
       unvisited_state_sets = Set[nfa_start_state_set]
       until unvisited_state_sets.empty?
-        new_dfa_state = State.new
-        
         # take one of the unvisited state sets
         state_set = unvisited_state_sets.first
         unvisited_state_sets.delete(state_set)
+
+        # this new DFA state, new_dfa_state, represents the nfa state set, state_set
+        new_dfa_state = State.new(state_set.any?(&:final?))
         
         # add the mapping from nfa state set => dfa state
         state_map[state_set] = new_dfa_state
@@ -153,15 +154,6 @@ module FSA
       # replace the nfa_state_set currently stored in each transition's "to" field with the
       # corresponding dfa state.
       dfa_transitions.each {|transition| transition.to = state_map[transition.to] }
-      
-      # the DFA should usually have an error state.
-      # if no error state exists, it means that there is no way the DFA can be in an error state.
-      error_state = state_map[Set.new]      # the empty nfa state set corresponds to the dfa error state
-      if error_state
-        @alphabet.each do |token|
-          dfa_transitions << Transition.new(token, error_state, error_state)
-        end
-      end
       
       DFA.new(state_map[nfa_start_state_set], dfa_transitions, Set.new(@alphabet))
     end
