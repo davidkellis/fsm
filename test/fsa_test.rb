@@ -29,20 +29,53 @@ class FSATest < Test::Unit::TestCase
     # m8 is a C comment parser
     # The Ragel rule is:
     #   comment = '/*' ( ( any @comm )* - ( any* '*/' any* ) ) '*/';
-    # @m8 = concat(literal('/*', simple_alphabet),
-    #              concat(difference(kleene(dot(simple_alphabet)),
-    #                                concat(kleene(dot(simple_alphabet)),
-    #                                       concat(literal('*/', simple_alphabet),
-    #                                              kleene(dot(simple_alphabet))))),
-    #                     literal('*/', simple_alphabet)))
+    @m8 = concat(concat(literal('/*'),
+                        difference(kleene(dot(simple_alphabet)),
+                                          concat(kleene(dot(simple_alphabet)),
+                                                 concat(literal('*/', simple_alphabet),
+                                                        kleene(dot(simple_alphabet)))))),
+                 literal('*/'))
+
+    @m8a = concat(literal('/*'),
+                  concat(difference(kleene(dot(simple_alphabet)),
+                                           concat(kleene(dot(simple_alphabet)),
+                                                  concat(literal('*/', simple_alphabet),
+                                                         kleene(dot(simple_alphabet))))),
+                         literal('*/')))
+
+    
+    # @m9 -> ( any* '*/' any* )
+    @m9 = concat(kleene(dot(simple_alphabet)),
+                 concat(literal('*/', simple_alphabet),
+                        kleene(dot(simple_alphabet))))
+    
+    # @m9a -> ( .* - ( .* '*/' .* ) )
+    @m9a = difference(kleene(dot(simple_alphabet)),
+                      concat(kleene(dot(simple_alphabet)),
+                             concat(literal('*/', simple_alphabet),
+                                    kleene(dot(simple_alphabet)))))
+    
+    # @m9b -> '/*' ( .* - ( .* '*/' .* ) )
+    @m9b = concat(literal('/*'), @m9a)
+    
+    # @m9c -> '/*' ( .* - ( .* '*/' .* ) ) '*/'
+    @m9c = concat(@m9b, literal('*/'))
     
     # m10 implements this regular expression: [a-g]* - ([a-g]*de[a-g]*)
     @m10 = difference(kleene(any('abcdefg')),
                       concat(concat(kleene(any('abcdefg')),
                                     literal('de', simple_alphabet)), 
                              kleene(any('abcdefg'))))
-    # @m11 = concat(difference(kleene(any('abcdefg')), concat(concat(kleene(any('abcdefg')), literal('ab')), kleene(any('abcdefg')))), literal('aa'))
+    
+    # @m11 -> ([a-g]* - ([a-g]*de[a-g]*)) 'aa'
+    @m11 = concat(difference(kleene(any('abcdefg')),
+                             concat(concat(kleene(any('abcdefg')),
+                                           literal('de', simple_alphabet)),
+                                    kleene(any('abcdefg')))),
+                  literal('aa'))
+    
     @m12 = negate(@m2)      # !(ab|yz)
+    
     # puts @m7.graphviz
   end
   
@@ -64,10 +97,14 @@ class FSATest < Test::Unit::TestCase
     @m5 = @m5.to_dfa
     @m6 = @m6.to_dfa
     @m7 = @m7.to_dfa
-    # @m8 = @m8.to_dfa
-    # @m9 = @m9.to_dfa
+    @m8 = @m8.to_dfa
+    @m8a = @m8a.to_dfa
+    @m9 = @m9.to_dfa
+    @m9a = @m9a.to_dfa
+    @m9b = @m9b.to_dfa
+    @m9c = @m9c.to_dfa
     @m10 = @m10.to_dfa
-    # @m11 = @m11.to_dfa
+    @m11 = @m11.to_dfa
     @m12 = @m12.to_dfa
   end
   
@@ -117,11 +154,56 @@ class FSATest < Test::Unit::TestCase
     assert @m7.match?('abc')
     assert @m7.match?('integer')
     assert !@m7.match?('int')
-    # assert @m8.match?('/* blah blah blah */')
-    # assert @m8.match?('/* blah * / * // blah ***** blah */')
-    # assert @m8.match?('/**/')
-    # assert !@m8.match?('/* blah * / * // blah ***** blah **/ */')
-    # assert !@m8.match?('/* blah * / * // blah ***** blah */ /')
+
+    assert @m8.match?('/* blah blah blah */')
+    assert @m8.match?('/* blah * / * // blah ***** blah */')
+    assert @m8.match?('/**/')
+    assert !@m8.match?('/* blah * / * // blah ***** blah **/ */')
+    assert !@m8.match?('/* blah * / * // blah ***** blah */ /')
+
+    assert @m8a.match?('/* blah blah blah */')
+    assert @m8a.match?('/* blah * / * // blah ***** blah */')
+    assert @m8a.match?('/**/')
+    assert !@m8a.match?('/* blah * / * // blah ***** blah **/ */')
+    assert !@m8a.match?('/* blah * / * // blah ***** blah */ /')
+
+    assert @m9.match?('*/')
+    assert @m9.match?('*/abc')
+    assert @m9.match?('abc*/')
+    assert @m9.match?(' */ ')
+    assert !@m9.match?('')
+    assert !@m9.match?('abc')
+    assert !@m9.match?('* /')
+    assert !@m9.match?('*a/')
+    assert !@m9.match?('/*')
+    
+    assert @m9a.match?('')
+    assert @m9a.match?('abc')
+    assert @m9a.match?('* /')
+    assert @m9a.match?('*a/')
+    assert @m9a.match?('/** /')
+    assert !@m9a.match?('*/')
+    assert !@m9a.match?('*/abc')
+    assert !@m9a.match?('abc*/')
+    assert !@m9a.match?(' */ ')
+
+    assert @m9b.match?('/*')
+    assert @m9b.match?('/*abc')
+    assert @m9b.match?('/** /')
+    assert @m9b.match?('/**a/')
+    assert @m9b.match?('/* * /')
+    assert !@m9b.match?('/**/')
+    assert !@m9b.match?('/* */abc')
+    assert !@m9b.match?('/*abc*/')
+    assert !@m9b.match?('/* */ ')
+
+    assert @m9c.match?('/* blah blah blah */')
+    assert @m9c.match?('/* blah * / * // blah ***** blah */')
+    assert @m9c.match?('/**/')
+    assert @m9c.match?('/* * */')
+    assert !@m9c.match?('/* blah * / * // blah ***** blah **/ */')
+    assert !@m9c.match?('/* blah * / * // blah ***** blah */ /')
+    
     assert @m10.match?('')
     assert @m10.match?('ed')
     assert @m10.match?('aaaabdddddceeeddddgfecbabca')
@@ -131,9 +213,20 @@ class FSATest < Test::Unit::TestCase
     assert !@m10.match?('aadeaa')
     assert !@m10.match?('deaaaa')
     assert !@m10.match?('aaaade')
-    # assert @m11.match?('acdaa')
-    # assert @m11.match?('bbaa')
-    # assert !@m11.match?('aabaa')
+    
+    assert @m11.match?('acdaa')
+    assert @m11.match?('bbaa')
+    assert @m11.match?('aa')
+    assert @m11.match?('edaa')
+    assert @m11.match?('aaaabdddddceeeddddgfecbabcaa')
+    assert @m11.match?('aabaa')
+    assert !@m11.match?('deaa')
+    assert !@m11.match?('eddeaa')
+    assert !@m11.match?('deedaa')
+    assert !@m11.match?('aadeaa')
+    assert !@m11.match?('deaaaa')
+    assert !@m11.match?('aaaade')
+    
     assert !@m12.match?("ab")
     assert !@m12.match?("yz")
     assert @m12.match?("")
