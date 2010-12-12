@@ -8,13 +8,15 @@ class FSATest < Test::Unit::TestCase
   include FSA::Builder
   
   def build_nfa_machines
-    @a = literal('a')
-    @b = literal('b')
-    @c = literal('c')
-    @d = literal('d')
-    @n = literal('n')
-    @y = literal('y')
-    @z = literal('z')
+    simple_alphabet = (('a'..'z').to_a + ['*', '/', ' ']).to_set
+    
+    @a = literal('a', simple_alphabet)
+    @b = literal('b', simple_alphabet)
+    @c = literal('c', simple_alphabet)
+    @d = literal('d', simple_alphabet)
+    @n = literal('n', simple_alphabet)
+    @y = literal('y', simple_alphabet)
+    @z = literal('z', simple_alphabet)
     
     @m1 = concat(@a, @b)                                         # ab
     @m2 = union(concat(@a, @b), concat(@y, @z))                  # ab|yz
@@ -22,16 +24,25 @@ class FSATest < Test::Unit::TestCase
     @m4 = plus(@m1)                                              # (ab)+
     @m5 = concat(@b, concat(repeat(concat(@a, @n), 2), @a))      # b(an){2}a
     @m6 = repeat(@a, 4, 6)                                       # a{4,6}
-    # @m7 = difference(plus(range('a', 'z')), literal('int'))      # [a-z]+ - 'int'
+    @m7 = difference(plus(range('a', 'z')), literal('int', simple_alphabet))      # [a-z]+ - 'int'
     
-    # The following two machines match C-style comments. I'm not quite sure how they differ.
-    # @m8 = concat(concat(literal('/*'), difference(kleene(any('blah*/ ')), concat(concat(kleene(any('blah*/ ')), literal('*/')), kleene(any('blah*/ '))))), literal('*/'))
-    #@m9 = concat(concat(literal('/*'), difference(kleene(any('blah*/ ')), literal('*/'))), literal('*/'))
-    #@m9 = concat(concat(literal('/*'), difference(kleene(any('blah*/ ')), concat(concat(kleene(any('blah*/ ')), literal('*/')), kleene(any('blah*/ '))))), literal('*/')).to_dfa
-    #@m9 = concat(concat(literal('/*'), difference(kleene(any('blah*/ ')), intersection(kleene(any('blah*/ ')), literal('*/')) )), literal('*/'))
+    # m8 is a C comment parser
+    # The Ragel rule is:
+    #   comment = '/*' ( ( any @comm )* - ( any* '*/' any* ) ) '*/';
+    # @m8 = concat(literal('/*', simple_alphabet),
+    #              concat(difference(kleene(dot(simple_alphabet)),
+    #                                concat(kleene(dot(simple_alphabet)),
+    #                                       concat(literal('*/', simple_alphabet),
+    #                                              kleene(dot(simple_alphabet))))),
+    #                     literal('*/', simple_alphabet)))
     
-    # @m10 = difference(kleene(any('abcdefg')), concat(concat(kleene(any('abcdefg')), literal('de')), kleene(any('abcdefg'))))
+    # m10 implements this regular expression: [a-g]* - ([a-g]*de[a-g]*)
+    @m10 = difference(kleene(any('abcdefg')),
+                      concat(concat(kleene(any('abcdefg')),
+                                    literal('de', simple_alphabet)), 
+                             kleene(any('abcdefg'))))
     # @m11 = concat(difference(kleene(any('abcdefg')), concat(concat(kleene(any('abcdefg')), literal('ab')), kleene(any('abcdefg')))), literal('aa'))
+    @m12 = negate(@m2)      # !(ab|yz)
   end
   
   def build_dfa_machines
@@ -51,11 +62,12 @@ class FSATest < Test::Unit::TestCase
     @m4 = @m4.to_dfa
     @m5 = @m5.to_dfa
     @m6 = @m6.to_dfa
-    # @m7 = @m7.to_dfa
+    @m7 = @m7.to_dfa
     # @m8 = @m8.to_dfa
     # @m9 = @m9.to_dfa
-    # @m10 = @m10.to_dfa
+    @m10 = @m10.to_dfa
     # @m11 = @m11.to_dfa
+    @m12 = @m12.to_dfa
   end
   
   def test_nfa_builder
@@ -101,25 +113,36 @@ class FSATest < Test::Unit::TestCase
     assert @m6.match?('aaaaaa')
     assert !@m6.match?('aaa')
     assert !@m6.match?('aaaaaaa')
-    # assert @m7.match?('abc')
-    # assert @m7.match?('integer')
-    # assert !@m7.match?('int')
+    assert @m7.match?('abc')
+    assert @m7.match?('integer')
+    assert !@m7.match?('int')
     # assert @m8.match?('/* blah blah blah */')
     # assert @m8.match?('/* blah * / * // blah ***** blah */')
     # assert @m8.match?('/**/')
     # assert !@m8.match?('/* blah * / * // blah ***** blah **/ */')
     # assert !@m8.match?('/* blah * / * // blah ***** blah */ /')
-    # assert @m10.match?('')
-    # assert @m10.match?('ed')
-    # assert @m10.match?('aaaabdddddceeeddddgfecbabca')
-    # assert !@m10.match?('de')
-    # assert !@m10.match?('edde')
-    # assert !@m10.match?('deed')
-    # assert !@m10.match?('aadeaa')
-    # assert !@m10.match?('deaaaa')
-    # assert !@m10.match?('aaaade')
+    assert @m10.match?('')
+    assert @m10.match?('ed')
+    assert @m10.match?('aaaabdddddceeeddddgfecbabca')
+    assert !@m10.match?('de')
+    assert !@m10.match?('edde')
+    assert !@m10.match?('deed')
+    assert !@m10.match?('aadeaa')
+    assert !@m10.match?('deaaaa')
+    assert !@m10.match?('aaaade')
     # assert @m11.match?('acdaa')
     # assert @m11.match?('bbaa')
     # assert !@m11.match?('aabaa')
+    assert !@m12.match?("ab")
+    assert !@m12.match?("yz")
+    assert @m12.match?("")
+    assert @m12.match?("a")
+    assert @m12.match?("abc")
+    assert @m12.match?("abb")
+    assert @m12.match?("ab ")
+    assert @m12.match?("y")
+    assert @m12.match?("xyz")
+    assert @m12.match?(" yz")
+    assert @m12.match?("yz ")
   end
 end

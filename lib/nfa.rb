@@ -9,6 +9,8 @@ class String
 end
 
 module FSA
+  DEFAULT_ALPHABET = ((' '..'~').to_a + ["\n"] + ["\t"]).to_set
+  
   class NFA
     attr_accessor :alphabet
     attr_accessor :states
@@ -16,7 +18,7 @@ module FSA
     attr_accessor :transitions
     attr_accessor :final_states
     
-    def initialize(start_state, transitions = [], alphabet = Set.new)
+    def initialize(start_state, transitions = [], alphabet = DEFAULT_ALPHABET)
       @start_state = start_state
       @transitions = transitions
       
@@ -122,6 +124,7 @@ module FSA
     def to_dfa
       state_map = Hash.new            # this map contains nfa_state_set => dfa_state pairs
       dfa_transitions = []
+      dfa_alphabet = Set.new(@alphabet) - Set[:epsilon]
       visited_state_sets = Set.new()
       nfa_start_state_set = epsilon_closure([@start_state])
       unvisited_state_sets = Set[nfa_start_state_set]
@@ -138,7 +141,7 @@ module FSA
         
         # Figure out the set of next-states for each token in the alphabet
         # Add each set of next-states to unvisited_state_sets
-        @alphabet.each do |token|
+        dfa_alphabet.each do |token|
           next_nfa_state_set = next_states(state_set, token)
           unvisited_state_sets << next_nfa_state_set
           # add a transition from new_dfa_state -> next_nfa_state_set
@@ -155,7 +158,33 @@ module FSA
       # corresponding dfa state.
       dfa_transitions.each {|transition| transition.to = state_map[transition.to] }
       
-      DFA.new(state_map[nfa_start_state_set], dfa_transitions, Set.new(@alphabet))
+      DFA.new(state_map[nfa_start_state_set], dfa_transitions, dfa_alphabet)
+    end
+    
+    # def traverse
+    #   visited_states = Set.new()
+    #   unvisited_states = Set[@start_state]
+    #   begin
+    #     state = unvisited_states.shift
+    #     outbound_transitions = @transitions.select { |t| t.from == state }
+    #     outbound_transitions.each {|t| yield t }
+    #     destination_states = outbound_transitions.map(&:to).to_set
+    #     visited_states << state
+    #     unvisited_states = (unvisited_states | destination_states) - visited_states
+    #   end until unvisited_states.empty?
+    #   nil
+    # end
+    
+    def graphviz
+      retval = "digraph G { "
+      @transitions.each do |t|
+        retval += "#{t.from.id} -> #{t.to.id} [label=\"#{t.token}\"];"
+      end
+      @final_states.each do |s|
+        retval += "#{s.id} [color=lightblue2, style=filled];"
+      end
+      retval += " }"
+      retval
     end
   end
   
@@ -165,7 +194,7 @@ module FSA
     end
 
     attr_reader :id
-    attr_writer :final
+    attr_accessor :final
 
     @@next_id = 0
 

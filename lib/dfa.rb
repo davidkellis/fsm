@@ -8,7 +8,7 @@ module FSA
     attr_accessor :transitions
     attr_accessor :final_states
     
-    def initialize(start_state, transitions = [], alphabet = Set.new)
+    def initialize(start_state, transitions = [], alphabet = DEFAULT_ALPHABET)
       @start_state = start_state
       @transitions = transitions
       
@@ -65,7 +65,8 @@ module FSA
     end
     
     def next_state(state, input_token)
-      @transitions.find {|t| state == t.from && t.accept?(input_token) }.to
+      t = @transitions.find {|t| state == t.from && t.accept?(input_token) }
+      t.to
     end
 
     # Returns a set of State objects which are reachable through any transition path from the NFA's start_state.
@@ -79,6 +80,14 @@ module FSA
         unvisited_states = destination_states - visited_states
       end until unvisited_states.empty?
       visited_states
+    end
+    
+    def to_nfa
+      dfa = self.deep_clone
+      NFA.new(dfa.start_state, dfa.transitions, Set.new(dfa.alphabet))
+      # # add all of this machine's transitions to the new machine
+      # @transitions.each {|t| nfa.add_transition(t.token, t.from, t.to) }
+      # nfa
     end
       
     # This is an implementation of the "Reducing a DFA to a Minimal DFA" algorithm presented here: http://web.cecs.pdx.edu/~harry/compilers/slides/LexicalPart4.pdf
