@@ -1,5 +1,5 @@
 require 'set'
-# require 'dfa'
+require 'dfa'
 
 # hack
 class String
@@ -117,63 +117,53 @@ module FSA
       visited_states
     end
 
-    # This is an implementation of the "Algorithm: Convert NFA to DFA" presented here: http://web.cecs.pdx.edu/~harry/compilers/slides/LexicalPart3.pdf
-    # An implementation of the subset construction algorithm.
-    def dfa_state_chart
-      dfa_states = Hash.new
-      unprocessed_states = Array.new
-      
-      # push a new set of states onto the unprocessed states queue. The set of states is the epsilon closure of the start state of the NFA.
-      unprocessed_states.push @start_state.epsilon_closure([], false).to_set
-      until unprocessed_states.empty?
-        ss = unprocessed_states.shift                         # retrieve and remove the first state set from the queue
-        dfa_transitions = (dfa_states[ss] ||= Hash.new)       # retrieve the transition table for the given set of states, ss.
-        alphabet.each do |symbol|
-          # set of transitions that accept 'symbol', which lead away any/all states in ss
-          transitions = ss.reduce([]) { |memo, state| memo |= state.transitions.select { |t| t.accept?(symbol) } }
-          
-          # set of destination states connected to each symbol in set of transitions from above
-          destination_states = transitions.reduce(Set.new) { |m, t| m.add t.dest_state }
-          
-          # this is the epsilon closure over the set of destinations states connected to the set of transitions from above.
-          epsilon_closures = destination_states.reduce([]) { |m, s| m |= s.epsilon_closure([], false) }
-          
-          dfa_transitions[symbol] = epsilon_closures.to_set
-          unprocessed_states.push(dfa_transitions[symbol]) if dfa_states[dfa_transitions[symbol]].nil?    # add the epsilon closure as a new state if it hasn't already been added
-        end
-      end
-      
-      dfa_states
-    end
-    
-    def to_dfa(alphabet = :implicit)
-      composite_states = Hash.new
-      alphabet = implicit_alphabet if alphabet == :implicit
-      state_chart = dfa_state_chart(alphabet)
-      
-      error_state = DFAState.new
-      alphabet.each { |symbol| error_state.transition(symbol, error_state) }
-      
-      # Create all the new composite DFA states
-      for ss in state_chart.keys
-        final = ss.any? { |s| s.final? }
-        composite_states[ss] = DFAState.new(final, nil, ss.map(&:id).to_a)
-      end
-      
-      # Create all the transitions between the composite DFA states
-      state_chart.each do |source_ss, transitions|
-        transitions.each do |symbol, dest_ss|
-          composite_states[source_ss].transition(symbol, composite_states[dest_ss])
+    # This implements the subset construction algorithm presented on page 118 of the first edition of the dragon book.
+    # I found a similar explanation at: http://web.cecs.pdx.edu/~harry/compilers/slides/LexicalPart3.pdf
+    def to_dfa
+      state_map = Hash.new            # this map contains nfa_state_set => dfa_state pairs
+      dfa_transitions = []
+      visited_state_sets = Set.new()
+      nfa_start_state_set = epsilon_closure([@start_state])
+      unvisited_state_sets = Set[nfa_start_state_set]
+      until unvisited_state_sets.empty?
+        new_dfa_state = State.new
+        
+        # take one of the unvisited state sets
+        state_set = unvisited_state_sets.first
+        unvisited_state_sets.delete(state_set)
+        
+        # add the mapping from nfa state set => dfa state
+        state_map[state_set] = new_dfa_state
+        
+        # Figure out the set of next-states for each token in the alphabet
+        # Add each set of next-states to unvisited_state_sets
+        @alphabet.each do |token|
+          next_nfa_state_set = next_states(state_set, token)
+          unvisited_state_sets << next_nfa_state_set
+          # add a transition from new_dfa_state -> next_nfa_state_set
+          # next_nfa_state_set is a placeholder that I'll go back and replace with the corresponding dfa_state
+          # I don't insert the dfa_state yet, because it hasn't been created yet
+          dfa_transitions << Transition.new(token, new_dfa_state, next_nfa_state_set)
         end
         
-        # if there is a symbol in alphabet that isn't accounted for in the transition table, then transition to the error state on that symbol
-        (alphabet - transitions.keys).each do |symbol|
-          composite_states[source_ss].transition(symbol, error_state)
+        visited_state_sets << state_set
+        unvisited_state_sets = unvisited_state_sets - visited_state_sets
+      end
+      
+      # replace the nfa_state_set currently stored in each transition's "to" field with the
+      # corresponding dfa state.
+      dfa_transitions.each {|transition| transition.to = state_map[transition.to] }
+      
+      # the DFA should usually have an error state.
+      # if no error state exists, it means that there is no way the DFA can be in an error state.
+      error_state = state_map[Set.new]      # the empty nfa state set corresponds to the dfa error state
+      if error_state
+        @alphabet.each do |token|
+          dfa_transitions << Transition.new(token, error_state, error_state)
         end
       end
       
-      start_state = composite_states[@start_state.epsilon_closure([], false).to_set]
-      DFA.new(start_state, nil, alphabet)
+      DFA.new(state_map[nfa_start_state_set], dfa_transitions, Set.new(@alphabet))
     end
   end
   
@@ -204,9 +194,9 @@ module FSA
   class Transition
     Epsilon = :epsilon
     
-    attr_reader :token
-    attr_reader :from
-    attr_reader :to
+    attr_accessor :token
+    attr_accessor :from
+    attr_accessor :to
     
     def initialize(token, from_state, to_state)
       @token = token

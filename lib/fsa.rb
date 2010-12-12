@@ -21,11 +21,11 @@ module FSA
       nfa
     end
     
-    def any(token_stream)
+    def any(token_collection)
       start = State.new
       nfa = NFA.new(start)
       final = State.new(true)
-      token_stream.each {|token| nfa.add_transition(token, start, final) }
+      token_collection.each {|token| nfa.add_transition(token, start, final) }
       nfa
     end
     
@@ -142,7 +142,7 @@ module FSA
     #  combination of states involving a ﬁnal state from machine two has its ﬁnal state status revoked. 
     #  As with intersection, the operation is completed by pruning any path that does not lead to a ﬁnal 
     #  state.
-    def difference(a, b, alphabet = :implicit)
+    def difference(a, b)
       union_dfa = union(a, b).to_dfa(alphabet)                                  # perform union and make deterministic
       # reject final states that came from machine two 
       # or is a combination of states involving a final state from machine two

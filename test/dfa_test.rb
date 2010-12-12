@@ -2,7 +2,7 @@ $: << File.join(File.dirname(File.expand_path(__FILE__)), "..", "lib")
 require 'test/unit'
 require "nfa"
 
-class NFATest < Test::Unit::TestCase
+class DFATest < Test::Unit::TestCase
   def test_nfa
     # create some states with which to manually construct an NFA
     start = FSA::State.new
@@ -17,12 +17,14 @@ class NFATest < Test::Unit::TestCase
     nfa.add_transition('b', a, b1)
     nfa.add_transition('b', b1, b2)
     nfa.add_transition('c', b2, c)
+    dfa = nfa.to_dfa
+    puts dfa.transitions.map(&:inspect).join("\n")
   
-    # run the NFA
-    assert !nfa.match?("abc")
-    assert !nfa.match?("")
-    assert !nfa.match?("abbcc")
-    assert nfa.match?("abbc")
+    # run the DFA
+    assert !dfa.match?("abc")
+    assert !dfa.match?("")
+    assert !dfa.match?("abbcc")
+    assert dfa.match?("abbc")
 
     # build an NFA to match "abbc"
     nfa = FSA::NFA.new(start)
@@ -31,11 +33,12 @@ class NFATest < Test::Unit::TestCase
     nfa.add_transition(:epsilon, a, b1)
     nfa.add_transition('b', b1, b2)
     nfa.add_transition('c', b2, c)
+    dfa = nfa.to_dfa
   
     # run the NFA
-    assert nfa.match?("abc")
-    assert !nfa.match?("")
-    assert !nfa.match?("abbcc")
-    assert nfa.match?("abbc")
+    assert dfa.match?("abc")
+    assert !dfa.match?("")
+    assert !dfa.match?("abbcc")
+    assert dfa.match?("abbc")
   end
 end
