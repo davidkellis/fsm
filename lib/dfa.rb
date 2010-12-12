@@ -89,10 +89,11 @@ module FSA
       # @transitions.each {|t| nfa.add_transition(t.token, t.from, t.to) }
       # nfa
     end
-      
+    
     # This is an implementation of the "Reducing a DFA to a Minimal DFA" algorithm presented here: http://web.cecs.pdx.edu/~harry/compilers/slides/LexicalPart4.pdf
     # This implements Hopcroft's algorithm as presented on page 142 of the first edition of the dragon book.
     def minimize!
+      # I'll implement this when I need it
     end
   end
 end
