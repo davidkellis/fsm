@@ -65,6 +65,26 @@ module FSA
       accept?
     end
     
+    # Returns an array of matches found in the input string, each of which begins at the offset input_start_offset
+    def matches_at_offset(input, input_start_offset)
+      reset_current_states
+
+      matches = []
+      (input_start_offset...input.length).each do |offset|
+        token = input[offset]
+        self << token
+        matches << MatchRef.new(input, input_start_offset..offset) if accept?
+      end
+      matches
+    end
+    
+    # Returns an array of matches found anywhere in the input string
+    def matches(input)
+      (0...input.length).reduce([]) do |memo, offset|
+        memo + matches_at_offset(input, offset)
+      end
+    end
+    
     # process another input token
     def <<(input_token)
       @current_states = next_states(@current_states, input_token)
@@ -227,6 +247,32 @@ module FSA
     
     def accept?(input)
       @token == input
+    end
+  end
+  
+  class MatchRef
+    attr_accessor :string, :range
+
+    def initialize(original_string, match_range)
+      @string = original_string
+      @range = match_range
+    end
+    
+    def match
+      @string[@range]
+    end
+    
+    def to_s
+      match.to_s
+    end
+    
+    def ==(other)
+      self.string == other.string &&
+      self.range == other.range
+    end
+    
+    def eql?(other)
+      self == other
     end
   end
 end

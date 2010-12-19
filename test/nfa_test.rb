@@ -24,7 +24,7 @@ class NFATest < Test::Unit::TestCase
     assert !nfa.match?("abbcc")
     assert nfa.match?("abbc")
 
-    # build an NFA to match "abbc"
+    # build an NFA to match "abb?c"
     nfa = FSA::NFA.new(start)
     nfa.add_transition('a', start, a)
     nfa.add_transition('b', a, b1)
@@ -37,5 +37,16 @@ class NFATest < Test::Unit::TestCase
     assert !nfa.match?("")
     assert !nfa.match?("abbcc")
     assert nfa.match?("abbc")
+    
+    matches = nfa.matches("abcdefg,abcdefg,abbcdefg,abbbcdefg")
+    assert matches.count == 3
+    assert matches[0] != matches[1]
+    assert matches[0].match == matches[1].match
+    assert matches[0].range == (0..2)
+    assert matches[1].range == (8..10)
+    assert matches[2].range == (16..19)
+    assert matches[0].match == "abc"
+    assert matches[1].match == "abc"
+    assert matches[2].match == "abbc"
   end
 end
